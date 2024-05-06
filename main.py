@@ -26,9 +26,10 @@ def download_data():
 
     # Split to one dataframe per day
     df["Date"] = df["Date/time UTC"].dt.date
+    (CSV_PATH / "current_day.csv").unlink(missing_ok=True)
     for date in tqdm(df["Date"].unique(), desc="Saving data"):
         day_df = df[df["Date"] == date]
-        if date == pd.Timestamp.now().date():
+        if date == pd.Timestamp.now(tz="UTC").date():
             file_path = CSV_PATH / f"current_day.csv"
         else:
             year, month = date.year, date.month
