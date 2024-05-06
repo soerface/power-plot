@@ -6,15 +6,13 @@ import argparse
 import logging
 from tqdm import tqdm
 
-SHELLY_BASE_URL = "http://192.168.178.99"
-PHASE_URL = SHELLY_BASE_URL + "/emeter/{}/em_data.csv"  # Replace {} with 0, 1, 2
-
 logger = logging.getLogger(__name__)
 
 
-def download_data(csv_path: Path):
+def download_data(hostname: str, csv_path: Path):
+    phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
     phases = [
-        pd.read_csv(PHASE_URL.format(i), parse_dates=["Date/time UTC"])
+        pd.read_csv(phase_url % i, parse_dates=["Date/time UTC"])
         for i in tqdm(range(3))
     ]
 
@@ -163,7 +161,7 @@ if __name__ == "__main__":
              "If combined with --download, the downloaded files will be saved here.",
     )
     args.add_argument(
-        "output_path",
+        "--output_path", "-o",
         type=Path,
         help="Path to save the plot to. "
              "File ending determines the format. "
@@ -176,6 +174,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Do not plot, only download"
     )
+    args.add_argument("--host", type=str, help="Hostname or IP address of the Shelly device", default="192.168.178.99")
     args.add_argument("--sample-rate", type=str, help="Sample rate for the data")
     args.add_argument("--plot-phases", action="store_true", help="Plot the data for each phase")
     args.add_argument("--from", type=str, help="Plot the graph starting at this datetime")
@@ -184,7 +183,7 @@ if __name__ == "__main__":
     args.add_argument("--dark-theme", action="store_true", help="Use a dark theme for the plot")
     args = args.parse_args()
     if args.download or args.download_only:
-        download_data(args.csv_path)
+        download_data(args.host, args.csv_path)
     if not args.download_only:
         main(
             args.csv_path,
