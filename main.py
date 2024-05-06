@@ -9,8 +9,6 @@ from tqdm import tqdm
 SHELLY_BASE_URL = "http://192.168.178.99"
 PHASE_URL = SHELLY_BASE_URL + "/emeter/{}/em_data.csv"  # Replace {} with 0, 1, 2
 
-DATA_PATH = Path(__file__).parent / "data"
-
 logger = logging.getLogger(__name__)
 
 
@@ -77,6 +75,9 @@ def main(
         df = pd.read_csv(file, parse_dates=["Date/time UTC"])
         dfs.append(df)
     df = pd.concat(dfs)
+
+    # TODO: Convert UTC to local timezone
+    # df["Date/time UTC"] = df["Date/time UTC"].dt.tz_convert("Europe/Berlin")
 
     # Throw away data outside the timeframe
     if timeframe_start:
@@ -156,44 +157,42 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     args.add_argument(
-        "--csv-path",
+        "csv_path",
         type=Path,
         help="Directory to read the CSV files from. "
              "If combined with --download, the downloaded files will be saved here.",
-        default=DATA_PATH / "input",
     )
     args.add_argument(
-        "--output-path",
+        "output_path",
         type=Path,
         help="Path to save the plot to. "
              "File ending determines the format. "
              "Format must be supported by matplotlib."
              ".png and .svg at least are supported.",
-        default=DATA_PATH / "plot.png",
     )
     args.add_argument("--download", action="store_true", help="Download the data from the Shelly device")
     args.add_argument(
-        "--only-download",
+        "--download-only",
         action="store_true",
-        help="Do not plot, only download the data from the Shelly device"
+        help="Do not plot, only download"
     )
     args.add_argument("--sample-rate", type=str, help="Sample rate for the data")
     args.add_argument("--plot-phases", action="store_true", help="Plot the data for each phase")
-    args.add_argument("--timeframe-start", type=str, help="Plot the graph starting at this datetime")
-    args.add_argument("--timeframe-end", type=str, help="Plot the graph ending at this datetime")
+    args.add_argument("--from", type=str, help="Plot the graph starting at this datetime")
+    args.add_argument("--to", type=str, help="Plot the graph ending at this datetime")
     args.add_argument("--y-axis-limit", type=int, help="Limit the y-axis to this value")
     args.add_argument("--dark-theme", action="store_true", help="Use a dark theme for the plot")
     args = args.parse_args()
-    if args.download or args.only_download:
+    if args.download or args.download_only:
         download_data(args.csv_path)
-    if not args.only_download:
+    if not args.download_only:
         main(
             args.csv_path,
             args.output_path,
             args.sample_rate,
             args.plot_phases,
-            args.timeframe_start,
-            args.timeframe_end,
+            getattr(args, "from"),
+            args.to,
             args.y_axis_limit,
             args.dark_theme,
         )
