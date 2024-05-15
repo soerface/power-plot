@@ -27,7 +27,7 @@ jobs:
         with:
           images: ghcr.io/soerface/power-plot
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build image
         uses: docker/build-push-action@v5
