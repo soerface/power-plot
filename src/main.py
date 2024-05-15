@@ -41,7 +41,10 @@ def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str):
     sftp_url = csv_path[len("sftp://"):]
     hostname, _, path = sftp_url.partition("/")
     hostname, _, ssh_port = hostname.partition(":")
-    username, _, hostname = hostname.partition("@")
+    username, _, hostname = hostname.rpartition("@")
+    if not username:
+        logger.error("Username is required in the SFTP URL (sftp://username@hostname:port/path)")
+        sys.exit(1)
 
     transport = paramiko.Transport((hostname, int(ssh_port) or 22))
     try:
