@@ -53,7 +53,9 @@ def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str):
         logger.error("Authentication failed. Check your credentials")
         sys.exit(1)
     sftp = paramiko.SFTPClient.from_transport(transport)
-    for date in tqdm(df["Date"].unique(), desc="Saving data"):
+    pbar = tqdm(df["Date"].unique())
+    for date in pbar:
+        pbar.set_description(f"Saving data for {date}")
         try:
             sftp.chdir(f"/{path}")
         except FileNotFoundError:
@@ -68,7 +70,7 @@ def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str):
             file_path = f"{year}/{month:02}/{date}.csv"
             try:
                 sftp.stat(file_path)
-                tqdm.write(f"Skipping {date} as it already exists")
+                tqdm.write(f"Skipping {date} as the file sftp://{hostname}/{path}/{file_path} already exists")
                 continue
             except FileNotFoundError:
                 pass
@@ -96,11 +98,10 @@ def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None)
     if csv_path.startswith("sftp://") and not ssh_key_path:
         raise ValueError("ssh_key_path must be provided when using SFTP")
 
-    # phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
-    phase_url = f"/tmp/tmp.zNG32agH1t/em_data.%d.csv"
+    phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
     phases = [
         pd.read_csv(phase_url % i, parse_dates=["Date/time UTC"])
-        for i in tqdm(range(3))
+        for i in tqdm(range(3), desc=f"Downloading CSV from {hostname}")
     ]
 
     # Merge the dataframes
