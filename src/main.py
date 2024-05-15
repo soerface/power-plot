@@ -36,28 +36,46 @@ def write_to_fs(csv_path: Path, df: DataFrame):
         ])
 
 
-def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str, ssh_username: str):
+def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str, ssh_username: str, ssh_port: int = 22):
     assert csv_path.startswith("sftp://")
     sftp_url = csv_path[len("sftp://"):]
     hostname, _, path = sftp_url.partition("/")
-    transport = paramiko.Transport((hostname, 22))
-    transport.connect(username=ssh_username, pkey=paramiko.RSAKey.from_private_key_file(ssh_key_path))
+    transport = paramiko.Transport((hostname, ssh_port))
+    try:
+        transport.connect(username=ssh_username, pkey=paramiko.RSAKey.from_private_key_file(ssh_key_path))
+    except paramiko.ssh_exception.AuthenticationException:
+        logger.error("Authentication failed. Check your credentials")
+        sys.exit(1)
     sftp = paramiko.SFTPClient.from_transport(transport)
     for date in tqdm(df["Date"].unique(), desc="Saving data"):
+        try:
+            sftp.chdir(f"/{path}")
+        except FileNotFoundError:
+            logger.error(f"Path /{path} does not exist on the SFTP server")
+            logger.info(f"Existing paths: {sftp.listdir()}")
+            sys.exit(1)
         day_df = df[df["Date"] == date]
         if date == pd.Timestamp.now(tz="UTC").date():
-            file_path = f"{path}/current_day.csv"
+            file_path = "current_day.csv"
         else:
             year, month = date.year, date.month
-            file_path = f"{path}/{year}/{month:02}/{date}.csv"
+            file_path = f"{year}/{month:02}/{date}.csv"
             try:
                 sftp.stat(file_path)
                 tqdm.write(f"Skipping {date} as it already exists")
                 continue
             except FileNotFoundError:
                 pass
-        sftp.makedirs(file_path.rsplit("/", 1)[0])
-        with sftp.file(file_path, "w") as file:
+        path_components, _, filename = file_path.rpartition("/")
+        for path_component in path_components.split("/"):
+            # TODO: optimize speed by not constantly changing directories
+            try:
+                sftp.chdir(path_component)
+            except IOError:
+                sftp.mkdir(path_component)
+                sftp.chdir(path_component)
+        with sftp.file(filename, "w") as file:
+            tqdm.write(f"Writing data to /{path}/{file_path}")
             day_df.to_csv(file, index=False, columns=[
                 "Date/time UTC",
                 "Active energy Wh (A)", "Returned energy Wh (A)",
@@ -68,11 +86,12 @@ def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str, ssh_username:
     transport.close()
 
 
-def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None, ssh_username: str | None = None):
+def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None, ssh_username: str | None = None, ssh_port: int = 22):
     if csv_path.startswith("sftp://") and not (ssh_key_path and ssh_username):
         raise ValueError("ssh_key_path and ssh_username must be provided when using SFTP")
 
-    phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
+    # phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
+    phase_url = f"/tmp/tmp.zNG32agH1t/em_data.%d.csv"
     phases = [
         pd.read_csv(phase_url % i, parse_dates=["Date/time UTC"])
         for i in tqdm(range(3))
@@ -87,7 +106,7 @@ def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None,
 
     df["Date"] = df["Date/time UTC"].dt.date
     if csv_path.startswith("sftp://"):
-        write_to_sftp(csv_path, df, ssh_key_path, ssh_username)
+        write_to_sftp(csv_path, df, ssh_key_path, ssh_username, ssh_port)
     else:
         write_to_fs(Path(csv_path), df)
 
@@ -237,6 +256,9 @@ if __name__ == "__main__":
         action="store_true",
         help="Do not plot, only download"
     )
+    args.add_argument("--ssh-key-path", type=str, help="Path to the SSH key for SFTP")
+    args.add_argument("--ssh-username", type=str, help="Username for SFTP")
+    args.add_argument("--ssh-port", type=int, help="Port for SFTP", default=22)
     args.add_argument("--host", type=str, help="Hostname or IP address of the Shelly device", default="192.168.178.99")
     args.add_argument("--sample-rate", type=str, help="Sample rate for the data", default="1min")
     args.add_argument("--plot-phases", action="store_true", help="Plot the data for each phase")
@@ -256,7 +278,7 @@ if __name__ == "__main__":
     logger.info("Loglevel set to %s", logging.getLevelName(logger.getEffectiveLevel()))
 
     if args.download or args.download_only:
-        download_data(args.host, args.csv_path)
+        download_data(args.host, args.csv_path, args.ssh_key_path, args.ssh_username, args.ssh_port)
     if not args.download_only:
         if not args.output_path:
             logger.error("--output_path is required when plotting")
