@@ -96,7 +96,11 @@ def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str):
 
 def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None):
     if csv_path.startswith("sftp://") and not ssh_key_path:
-        raise ValueError("ssh_key_path must be provided when using SFTP")
+        logger.error("--ssh-key-path must be provided when using SFTP")
+        sys.exit(1)
+    if ssh_key_path and not Path(ssh_key_path).exists():
+        logger.error(f"SSH key at {ssh_key_path} does not exist")
+        sys.exit(1)
 
     phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
     phases = [
