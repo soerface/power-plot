@@ -102,6 +102,10 @@ def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None)
         logger.error(f"SSH key at {ssh_key_path} does not exist")
         sys.exit(1)
 
+    if not hostname:
+        logger.error("--host is required when downloading data")
+        sys.exit(1)
+
     phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
     phases = [
         pd.read_csv(phase_url % i, parse_dates=["Date/time UTC"])
@@ -269,7 +273,7 @@ if __name__ == "__main__":
     )
     args.add_argument("--ssh-key-path", type=str, help="Path to the SSH key for SFTP")
     args.add_argument("--ssh-port", type=int, help="Port for SFTP", default=22)
-    args.add_argument("--host", type=str, help="Hostname or IP address of the Shelly device", default="192.168.178.99")
+    args.add_argument("--host", type=str, help="Hostname or IP address of the Shelly device")
     args.add_argument("--sample-rate", type=str, help="Sample rate for the data", default="1min")
     args.add_argument("--plot-phases", action="store_true", help="Plot the data for each phase")
     args.add_argument("--from", type=str, help="Plot the graph starting at this datetime")
