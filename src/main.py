@@ -1,3 +1,4 @@
+import socket
 import sys
 from pathlib import Path
 
@@ -36,22 +37,38 @@ def write_to_fs(csv_path: Path, df: DataFrame):
         ])
 
 
-def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str):
-    assert csv_path.startswith("sftp://")
-    sftp_url = csv_path[len("sftp://"):]
+def parse_sftp_url(sftp_url: str) -> tuple[str, int, str, str]:
+    assert sftp_url.startswith("sftp://")
+    sftp_url = sftp_url[len("sftp://"):]
     hostname, _, path = sftp_url.partition("/")
     hostname, _, ssh_port = hostname.partition(":")
     username, _, hostname = hostname.rpartition("@")
     if not username:
         logger.error("Username is required in the SFTP URL (sftp://username@hostname:port/path)")
         sys.exit(1)
+    return hostname, int(ssh_port) or 22, username, path
 
-    transport = paramiko.Transport((hostname, int(ssh_port) or 22))
+
+def test_sftp_connection(csv_path: str, ssh_key_path: str):
+    hostname, ssh_port, username, _ = parse_sftp_url(csv_path)
+    try:
+        transport = paramiko.Transport((hostname, ssh_port))
+    except socket.gaierror:
+        logger.error(f"Could not resolve hostname {hostname}")
+        sys.exit(1)
     try:
         transport.connect(username=username, pkey=paramiko.RSAKey.from_private_key_file(ssh_key_path))
     except paramiko.ssh_exception.AuthenticationException:
         logger.error("Authentication failed. Check your credentials")
         sys.exit(1)
+    transport.close()
+
+
+def write_to_sftp(csv_path: str, df: DataFrame, ssh_key_path: str):
+    hostname, ssh_port, username, path = parse_sftp_url(csv_path)
+
+    transport = paramiko.Transport((hostname, int(ssh_port) or 22))
+    transport.connect(username=username, pkey=paramiko.RSAKey.from_private_key_file(ssh_key_path))
     sftp = paramiko.SFTPClient.from_transport(transport)
     pbar = tqdm(df["Date"].unique())
     for date in pbar:
@@ -105,6 +122,9 @@ def download_data(hostname: str, csv_path: str, ssh_key_path: str | None = None)
     if not hostname:
         logger.error("--host is required when downloading data")
         sys.exit(1)
+
+    if csv_path.startswith("sftp://"):
+        test_sftp_connection(csv_path, ssh_key_path)
 
     phase_url = f"http://{hostname}/emeter/%d/em_data.csv"
     phases = [
