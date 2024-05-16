@@ -14,6 +14,9 @@ docker run --rm -it \
   --ssh-key-path /mnt/id_rsa 
 ```
 
+It's recommended to do this daily to get the best resolution of your data
+(1 minute, after one or two days the resolution will be reduced to 10 minutes).
+
 ## Plotting data
 
 This example plots data from a directory that needs to be mounted into the container.
