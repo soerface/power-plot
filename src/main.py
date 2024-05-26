@@ -194,15 +194,15 @@ def main(
     if timeframe_end:
         df = df[df["Date/time UTC"] <= timeframe_end]
 
-    # New column from sum of "Active energy Wh (A)", "Active energy Wh (B)", "Active energy Wh (C)"
-    # and "Returned energy Wh (A)", "Returned energy Wh (B)", "Returned energy Wh (C)"
-    df["Total Active energy Wh"] = df["Active energy Wh (A)"] + df["Active energy Wh (B)"] + df["Active energy Wh (C)"]
-    df["Total Returned energy Wh"] = df["Returned energy Wh (A)"] + df["Returned energy Wh (B)"] + df[
-        "Returned energy Wh (C)"]
-
     ts = df.set_index("Date/time UTC")
     # Put the data into buckets. Sum the values in each bucket.
     ts = ts.resample(sample_rate).sum()
+
+    # New column from sum of "Active energy Wh (A)", "Active energy Wh (B)", "Active energy Wh (C)"
+    # and "Returned energy Wh (A)", "Returned energy Wh (B)", "Returned energy Wh (C)"
+    ts["Total Active energy Wh"] = ts["Active energy Wh (A)"] + ts["Active energy Wh (B)"] + ts["Active energy Wh (C)"]
+    ts["Total Returned energy Wh"] = ts["Returned energy Wh (A)"] + ts["Returned energy Wh (B)"] + ts[
+        "Returned energy Wh (C)"]
 
     # Plot the data
     if dark_theme:
@@ -233,8 +233,10 @@ def main(
         ylim=(0, y_axis_limit) if y_axis_limit else None,
     )
     if plot_phases:
-        columns = ["Active energy Wh (A)", "Active energy Wh (B)", "Active energy Wh (C)",
-                      "Returned energy Wh (A)", "Returned energy Wh (B)", "Returned energy Wh (C)"]
+        columns = [
+            "Active energy Wh (A)", "Active energy Wh (B)", "Active energy Wh (C)",
+            "Returned energy Wh (A)", "Returned energy Wh (B)", "Returned energy Wh (C)"
+        ]
         for i, (column, color) in enumerate(zip(
                 columns,
                 ["#2ca02c", "#ff7f0e", "#1f77b4", "#d62728", "#9467bd", "#8c564b"],
