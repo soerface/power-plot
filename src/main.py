@@ -13,6 +13,16 @@ import paramiko
 
 logger = logging.getLogger(__name__)
 
+COLORS = [
+    "#D00000",
+    "#6A040F",
+    "#9D0208",
+    "#80B918",
+    "#55A630",
+    "#2B9348",
+    "#DDDD3D",
+]
+
 
 def write_to_fs(csv_path: Path, df: DataFrame):
     (csv_path / "current_day.csv").unlink(missing_ok=True)
@@ -168,7 +178,7 @@ def main(
         plot_phases=False,
         timeframe_start: str | None = None,
         timeframe_end: str | None = None,
-        y_axis_limit: int | None = None,
+        y_lim: int | None = None,
         dark_theme=False,
 ):
     if timeframe_start:
@@ -198,50 +208,63 @@ def main(
     # Put the data into buckets. Sum the values in each bucket.
     ts = ts.resample(sample_rate).sum()
 
+    # Returned energy should be negative
+    ts["Returned energy Wh (A)"] = -ts["Returned energy Wh (A)"]
+    ts["Returned energy Wh (B)"] = -ts["Returned energy Wh (B)"]
+    ts["Returned energy Wh (C)"] = -ts["Returned energy Wh (C)"]
+
     # New column from sum of "Active energy Wh (A)", "Active energy Wh (B)", "Active energy Wh (C)"
     # and "Returned energy Wh (A)", "Returned energy Wh (B)", "Returned energy Wh (C)"
     ts["Total Active energy Wh"] = ts["Active energy Wh (A)"] + ts["Active energy Wh (B)"] + ts["Active energy Wh (C)"]
     ts["Total Returned energy Wh"] = ts["Returned energy Wh (A)"] + ts["Returned energy Wh (B)"] + ts[
         "Returned energy Wh (C)"]
+    ts["Net energy Wh"] = ts["Total Active energy Wh"] + ts["Total Returned energy Wh"]
 
     # Plot the data
     if dark_theme:
         plt.style.use("dark_background")
         # colors of the graph should look normal
-        plt.rcParams["axes.prop_cycle"] = plt.cycler(color=[
-            "#1f77b4",
-            "#ff7f0e",
-            "#2ca02c",
-            "#d62728",
-            "#9467bd",
-            "#8c564b",
-            "#e377c2",
-            "#7f7f7f",
-            "#bcbd22",
-            "#17becf"
-        ])
+        plt.rcParams["axes.prop_cycle"] = plt.cycler(color=COLORS)
     ax = ts.plot(
-        y=["Total Active energy Wh", "Total Returned energy Wh"],
+        y=["Total Active energy Wh", "Total Returned energy Wh", "Net energy Wh"],
         title="Total Active and Returned energy Wh",
         xlabel="Date/time UTC",
         ylabel="Energy Wh",
         figsize=(20, 10),
         grid=True,
-        style=["-", ":", "--", "-.", "-", ":", "--", "-."],
+        style=["-", "-", "--", "-.", "-", ":", "--", "-."],
         drawstyle="steps-post",
         # TODO: ylim start from 0 probably doesn't work with returned energy
-        ylim=(0, y_axis_limit) if y_axis_limit else None,
+        ylim=(None, y_lim) if y_lim else None,
+        color=[
+            COLORS[0], COLORS[3], COLORS[6],
+        ]
     )
     if plot_phases:
-        columns = [
+        active_columns = [
             "Active energy Wh (A)", "Active energy Wh (B)", "Active energy Wh (C)",
+        ]
+        for i, (column, color) in enumerate(zip(
+                active_columns,
+                COLORS[:3],
+        )):
+            y0 = ts[active_columns[:i]].sum(axis=1)
+            ax.fill_between(
+                ts.index,
+                y0,
+                y0 + ts[column],
+                label=column,
+                color=color,
+                step="post",
+            )
+        returned_columns = [
             "Returned energy Wh (A)", "Returned energy Wh (B)", "Returned energy Wh (C)"
         ]
         for i, (column, color) in enumerate(zip(
-                columns,
-                ["#2ca02c", "#ff7f0e", "#1f77b4", "#d62728", "#9467bd", "#8c564b"],
+                returned_columns,
+                COLORS[3:6],
         )):
-            y0 = ts[columns[:i]].sum(axis=1)
+            y0 = ts[returned_columns[:i]].sum(axis=1)
             ax.fill_between(
                 ts.index,
                 y0,
@@ -254,10 +277,18 @@ def main(
     else:
         ax.fill_between(
             ts.index,
+            0,
             ts["Total Active energy Wh"],
-            ts["Total Returned energy Wh"],
             label="Active energy Wh",
-            color="#1f77b4",
+            color=COLORS[0],
+            step="post",
+        )
+        ax.fill_between(
+            ts.index,
+            ts["Total Returned energy Wh"],
+            0,
+            label="Returned energy Wh",
+            color=COLORS[3],
             step="post",
         )
 
